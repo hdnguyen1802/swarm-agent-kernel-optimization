@@ -1,0 +1,69 @@
+{
+  "model_id": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "dtype": "float16",
+  "attention": "sdpa",
+  "workloads": [
+    {
+      "batch_size": 1,
+      "sequence_length": 128
+    },
+    {
+      "batch_size": 1,
+      "sequence_length": 512
+    },
+    {
+      "batch_size": 2,
+      "sequence_length": 128
+    }
+  ],
+  "warmup": 5,
+  "trials": 15,
+  "repeats": 10,
+  "correctness_seeds": [
+    1729,
+    2718,
+    3141
+  ],
+  "atol": 0.03,
+  "rtol": 0.02,
+  "min_speedup": 1.02,
+  "max_p95_ratio": 1.05,
+  "compile_mode": "default",
+  "fullgraph": true,
+  "model_reference": "torch_compile",
+  "max_fixture_cases": 6,
+  "agent": {
+    "provider": "vertex",
+    "project": "fleet-management-poc20231031",
+    "location": "global",
+    "model": "gemini-3.8-flash",
+    "writers": 8,
+    "max_parallel_calls": 2,
+    "max_retries": 2,
+    "islands": [
+      "memory",
+      "parallel",
+      "compute",
+      "fusion"
+    ],
+    "generations": 1,
+    "migration_interval": 2,
+    "max_calls": 11,
+    "max_output_tokens": 4096,
+    "max_total_tokens": 500000,
+    "timeout_seconds": 180,
+    "context_chars": 90000,
+    "stall_generations": 4
+  },
+  "worker": {
+    "transport": "ssh",
+    "host": "zimug1@144.214.209.197",
+    "identity": "~/.ssh/id_ed25519_codex_fyp",
+    "root": "sako/project",
+    "python": "../.venv/bin/python",
+    "gpu": 0,
+    "timeout_seconds": 1800,
+    "cuda_home": "/usr/local/cuda-12.3"
+  }
+}
