@@ -7,6 +7,7 @@ from pathlib import Path
 from .core import (candidate_id, digest, implementation_hash, read_json,
                    validate_candidate, write_json)
 from .store import BudgetExhausted, Store
+from .islands import ParentPolicy, ParentSelectionError, STRATEGIES
 
 SYSTEM = "You assist a CUDA kernel search. Return JSON. Measurements decide correctness and speed. Use short, clear English."
 
@@ -41,6 +42,7 @@ class SearchLoop:
         self.pending = self.store.get("pending_repairs", {})
         self.owners = self.store.get("owners", {})
         self.blocked = self.store.get("blocked_model_candidates", {})
+        self.parent_policy = ParentPolicy(self.store, self.limits, self.directory, self.by_id)
 
     def relative(self, path):
         return Path(path).relative_to(self.root).as_posix()
@@ -80,6 +82,7 @@ class SearchLoop:
     def assignments(self, generation, plan):
         saved = self.store.get(f"assignments:{generation}")
         if saved is not None:
+            self.parent_policy.save(saved, generation)
             return saved
         order = [k for k in plan.get("task_order", []) if k in self.by_id]
         order.extend(t["id"] for t in self.tasks if t["id"] not in order)
@@ -88,28 +91,25 @@ class SearchLoop:
             repairs = [r for r in self.pending.values() if r["slot"] == slot]
             repairs.sort(key=lambda r: r["stage"] != "model")
             repair = repairs[0] if repairs else None
-            island = self.limits["islands"][slot // 2]
             task_id = repair["task_id"] if repair else order[(generation * 4 + slot // 2) % len(order)]
-            rows = self.store.candidates(task_id)
-            migrate = generation % self.limits["migration_interval"] == 0
-            parents = [r for r in rows if r["id"] not in self.blocked and r["accepted"]
-                       and (migrate or r["island"] == island)]
-            # Failed source is useful for repair even when no candidate passed yet.
-            parent = self.row(repair["candidate_id"]) if repair else (parents[0] if parents else None)
-            if parent is None and rows:
-                parent = max(rows, key=lambda r: r["generation"])
-            assigned.append({"slot": slot, "island": island, "task_id": task_id,
-                             "parent_id": parent["id"] if parent else None, "repair": repair,
-                             "repairs_used": repair["repairs_used"] + 1 if repair else 0})
+            assigned.append(self.parent_policy.select(slot, generation, task_id, repair))
+        self.parent_policy.save(assigned, generation)
         self.store.set(f"assignments:{generation}", assigned)
         return assigned
 
     def write(self, assignment, generation, plan):
+        self.parent_policy.validate(assignment, generation)
         task = self.by_id[assignment["task_id"]]
-        rows = self.store.candidates(task["id"])
+        rows = [r for r in self.store.candidates(task["id"])
+                if self.store.has_island(r["id"], assignment["island"], generation)
+                or r["id"] == assignment["parent_id"]]
         recent = sorted(rows, key=lambda r: r["generation"], reverse=True)[:3]
         prompt = {"task": task, "island": assignment["island"], "writer": assignment["slot"],
                   "generation": generation, "persistent_plan": plan,
+                  "parent_selection": assignment["selection"],
+                  "island_strategy": STRATEGIES[assignment["island"]],
+                  "writer_mode": "Explore one new hypothesis." if assignment["slot"] % 2 == 0
+                                 else "Refine the supplied approach with one focused experiment, or develop a fresh approach if no parent exists.",
                   "parent": self.row(assignment["parent_id"])["source"] if assignment["parent_id"] else None,
                   "repair": assignment["repair"],
                   "instruction": "Repair the supplied parent for the same task. Address the failing tests first."
@@ -223,11 +223,14 @@ class SearchLoop:
                         a = futures[future]
                         try:
                             candidate = future.result()
-                            key, _ = self.store.add(candidate, a["island"], generation, a["parent_id"])
+                            key, fresh = self.store.add(candidate, a["island"], generation, a["parent_id"])
+                            self.store.record_emission(generation, a["slot"], key, a["island"], not fresh, a["selection"])
                             submissions[str(a["slot"])] = key
                             self.store.set(f"submissions:{generation}", submissions)
                         except BudgetExhausted:
                             exhausted = True
+                        except ParentSelectionError:
+                            raise
                         except Exception as error:
                             write_json(self.directory / "errors" / f"{generation}-{a['slot']}.json", {"error": str(error)})
                 for a in assigned:
@@ -236,6 +239,7 @@ class SearchLoop:
                         self.evaluate(a, self.row(key)["source"], generation)
                 # Even the last round and a partially exhausted round get a model check.
                 self.measure_model(generation, assigned)
+                self.parent_policy.plan_migration(generation + 1, self.pending)
                 self.store.set("generation", generation + 1)
                 if exhausted:
                     status = "budget_exhausted"
@@ -260,6 +264,7 @@ class SearchLoop:
         if self.store.get("best_model_measurement") and not self.pending and status == "generation_limit_reached":
             status = "accepted"
         result = {"status": status, "usage": self.store.usage(), "pending_repairs": self.pending,
+                  "duplicate_proposals": sum(e["duplicate"] for e in self.store.emissions()),
                   "manifest": selected["manifest"] if selected else {"entries": []},
                   "model_result": selected["result"] if selected else None}
         write_json(self.directory / "manifest.json", result["manifest"])

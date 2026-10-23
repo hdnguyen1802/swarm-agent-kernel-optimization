@@ -47,3 +47,9 @@ repair.result. Fix the reported failures before you seek more speed.
 The model report contains the tested combination. A failed combination does not
 prove that your kernel alone caused the failure. Preserve the operation contract.
 Return changed code. A new name with the same source does not count as a repair.
+
+Follow island_strategy for your main search direction. Use writer_mode to choose
+an experiment. In strategy, state your hypothesis, the code change, and why it can
+improve execution. During repair, correct the reported failure first.
+The harness supplies an explicit parent_selection record. A fresh_start has no
+parent. Shared reference excerpts are available to every island.

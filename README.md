@@ -29,6 +29,46 @@ compute, and fusion. Each group has two writers. Good candidates move between gr
 The controller permits two API calls at a time. Eight writers do not require eight
 simultaneous API requests. Quota and temporary service errors use bounded retries.
 
+## Island search
+
+Each island receives a separate search brief with three experiment directions.
+The first writer explores a hypothesis. The second writer refines an approach.
+Both writers must explain their hypothesis and code change in `strategy`.
+
+| Island | Search directions |
+|---|---|
+| Memory | Access patterns, vector loads, data reuse, and fewer copies |
+| Parallel | Block sizes, tiles, work per thread, and resource use |
+| Compute | Tensor Core configurations, arithmetic schedules, and numerical behavior |
+| Fusion | Fewer launches, fewer intermediate tensors, and correct operation boundaries |
+
+Parent selection follows four explicit rules:
+
+1. A pending repair keeps its exact source, task, and writer.
+2. A planned migration supplies one recorded parent to the second writer of an island.
+3. Otherwise, a writer can select an eligible parent from its own island.
+4. With no eligible local parent, it starts with no parent and uses the task references.
+
+There is no fallback to another island's archive. The harness checks each parent
+before it calls Gemini. An unauthorized foreign parent causes an explicit error.
+All islands can read the shared CUTLASS references and shared performance summaries.
+
+With `migration_interval=2`, the harness plans transfers after rounds 2, 4, and 6.
+The following round can use those transfers. Each island can receive one migrant.
+A migrant must match the task, pass the kernel gates, and have no known model rejection.
+Repairs take priority. The event records a skipped transfer if no eligible candidate exists.
+A planned event alone does not mean that a writer used its candidate.
+
+Every round saves `selections/round-NNNN.json` under the run folder.
+Each decision records the writer, receiving island, task, parent, source island,
+reason, and migration event. The `migrations` folder contains transfer plans and skip reasons.
+`sako status` and `sako report` show these records and duplicate proposal counts.
+If two islands independently propose identical source, the archive records both memberships
+and a duplicate emission. It retains the first origin. This does not permit a foreign parent
+before a writer independently proposes that source or receives a scheduled transfer.
+
+These briefs guide exploration. They do not guarantee that the LLM produces distinct algorithms.
+
 ## Layout
 
 ```text

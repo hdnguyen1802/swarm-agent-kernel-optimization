@@ -75,6 +75,11 @@ def main():
         from .store import Store
         store = Store(run / "state.sqlite")
         result = {"usage": store.usage(), "generation": store.get("generation", 0),
+                  "parent_selections": [s for p in sorted((run / "selections").glob("*.json"))
+                                        for s in read_json(p)["selections"]],
+                  "migration_events": [read_json(p) for p in sorted((run / "migrations").glob("*.json"))],
+                  "candidate_emissions": store.emissions(),
+                  "duplicate_proposals": sum(e["duplicate"] for e in store.emissions()),
                   "candidates": [{k: row[k] for k in ("id", "task", "island", "score", "accepted")}
                                  for row in store.candidates()]}
         if args.command == "report":
@@ -83,6 +88,12 @@ def main():
                      "|---|---|---|---:|---|"]
             lines.extend(f"| {r['id']} | {r['task']} | {r['island']} | {r['score']} | {bool(r['accepted'])} |"
                          for r in result["candidates"])
+            lines.extend(["", f"Duplicate proposals: {result['duplicate_proposals']}", "",
+                          "| Round | Writer | Island | Parent choice | Parent | Source island | Migration event |",
+                          "|---:|---:|---|---|---|---|---|"])
+            lines.extend(f"| {s['round']} | {s['slot']} | {s['receiving_island']} | {s['reason']} | "
+                         f"{s['candidate_id']} | {s['source_island']} | {s['migration_event']} |"
+                         for s in result["parent_selections"])
             final = read_json(run / "result.json") if (run / "result.json").exists() else {}
             model = final.get("model_result")
             lines.extend(["", "Complete model decision: " + json.dumps(model["decision"] if model else "Not measured.")])

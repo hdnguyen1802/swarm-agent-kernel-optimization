@@ -28,10 +28,21 @@ If it exceeds the limit, the controller removes old feedback and then source exc
 It keeps the task and the selected parent source. It refuses a request that still exceeds the limit.
 Raw observations stay on disk. The current implementation does not use an LLM summary tool.
 
-Each group keeps access to its accepted candidates. At the migration interval,
-writers can use the best accepted candidate from any group for the assigned task.
+Each group normally selects its own eligible candidates. An empty group starts fresh.
+After each migration interval, the controller creates a saved transfer plan.
+Only the second writer of each group can use its planned migrant in the following round.
+Repairs take priority. A transfer can change the next task, but the task must match the migrant.
+The parent guard checks source membership, task, writer, round, and event before each request.
+There is no foreign-parent fallback. Failed source is available through explicit repair assignments.
 The archive keeps all attempts, including rejected code. A source hash removes duplicates.
 This is an island search with a measured archive. It is not a full MAP-Elites implementation.
+
+The archive stores membership separately from the first source origin. When two writers
+independently submit identical code, the evaluator reuses the measured result. The archive
+records the duplicate and both island memberships. It does not grant membership merely
+because another island has that code. Selection files record every assignment, including
+assignments whose API request fails. Emission records describe proposals that actually returned.
+Migration files describe planned or skipped transfers. A migration selection record shows actual use.
 
 ## Repair loop
 
