@@ -47,14 +47,14 @@
       "compute",
       "fusion"
     ],
-    "generations": 1,
+    "generations": 2,
     "migration_interval": 2,
-    "max_calls": 11,
+    "max_calls": 30,
     "max_output_tokens": 4096,
     "max_total_tokens": 500000,
     "timeout_seconds": 180,
     "context_chars": 90000,
-    "stall_generations": 4
+    "max_repair_attempts": 3
   },
   "worker": {
     "transport": "ssh",

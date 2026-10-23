@@ -108,6 +108,7 @@ def custom_op(candidate, kind):
 
 
 def check_output(actual, expected, config):
+    import math
     import torch
     if not isinstance(actual, torch.Tensor):
         return {"passed": False, "reason": "Output is not a tensor."}
@@ -115,8 +116,23 @@ def check_output(actual, expected, config):
         return {"passed": False, "reason": "Output metadata differs."}
     finite = bool(torch.isfinite(actual).all() and torch.isfinite(expected).all())
     error = float((actual.float() - expected.float()).abs().max()) if finite else None
-    return {"passed": finite and bool(torch.allclose(actual, expected, atol=config["atol"], rtol=config["rtol"])),
-            "max_abs_error": error, "atol": config["atol"], "rtol": config["rtol"]}
+    result = {"passed": finite and bool(torch.allclose(actual, expected, atol=config["atol"], rtol=config["rtol"])),
+              "max_abs_error": error, "atol": config["atol"], "rtol": config["rtol"]}
+    if not result["passed"]:
+        a, b = actual.float(), expected.float()
+        allowed = config["atol"] + config["rtol"] * b.abs()
+        wrong = (~torch.isfinite(a)) | (~torch.isfinite(b)) | ((a - b).abs() > allowed)
+        indices = wrong.flatten().nonzero().flatten()
+        result["mismatched_elements"] = indices.numel()
+        result["shape"] = list(actual.shape)
+        result["examples"] = []
+        for index in indices[:5].tolist():
+            def number(t):
+                value = float(t.flatten()[index])
+                return value if math.isfinite(value) else None
+            result["examples"].append({"flat_index": index, "actual": number(a),
+                                       "expected": number(b), "allowed_abs_error": number(allowed)})
+    return result
 
 
 def paired_timings(baseline, candidate, config, repeats=None):

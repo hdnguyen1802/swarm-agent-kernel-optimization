@@ -24,6 +24,9 @@ def main():
     probe = torch.randn(4, 8, device="cuda", dtype=torch.float16)
     torch.testing.assert_close(model(probe), clone(probe))
     assert not check_output(torch.full_like(x, float("nan")), x, config)["passed"]
+    failure = check_output(torch.ones_like(x), torch.zeros_like(x), config)
+    assert failure["mismatched_elements"] == x.numel()
+    assert failure["examples"][0] == {"flat_index": 0, "actual": 1., "expected": 0., "allowed_abs_error": float(torch.tensor(config['atol']))}
     print("GPU precision, shared weights, and invalid-output checks passed.")
 
 

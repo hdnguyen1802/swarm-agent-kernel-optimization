@@ -246,7 +246,7 @@ def measure_model(config, manifest, catalog, candidate_root):
                 eager = forward(model, ids)
                 expected = baseline(ids)
                 eager_diagnostics.append(check_output(expected, eager, config))
-                checks.append(check_output(candidate(ids), expected, config))
+                checks.append({**check_output(candidate(ids), expected, config), "seed": seed})
             item = {"workload": workload, "correct": all(c["passed"] for c in checks), "checks": checks,
                     "reference": "torch_compile", "compiled_vs_eager_diagnostics": eager_diagnostics}
             if item["correct"]:

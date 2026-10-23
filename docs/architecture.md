@@ -33,6 +33,20 @@ writers can use the best accepted candidate from any group for the assigned task
 The archive keeps all attempts, including rejected code. A source hash removes duplicates.
 This is an island search with a measured archive. It is not a full MAP-Elites implementation.
 
+## Repair loop
+
+The full model test runs inside each generation. A failed test creates a saved repair
+assignment for the writer that supplied each selected candidate. The writer receives
+the exact source, failed workloads, seeds, numerical limits, and error examples.
+It keeps the task until a repair passes or reaches the repair limit.
+Raw reports stay on disk. Prompts omit raw timing arrays but keep test summaries.
+Several failed tasks can wait for one writer. The queue keeps each task separately.
+The controller rechecks repaired code at the operation and model levels.
+For each task, it first considers the latest generation. It then compares operation scores.
+A failed combination does not prove which member caused the failure. Writers receive
+the full combination report. The controller excludes failed selected candidates and
+keeps the best measured model result in a separate checkpoint.
+
 ## Test boundary
 
 The candidate ABI returns one tensor. It takes a list of input tensors and scalar values.

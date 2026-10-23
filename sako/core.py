@@ -59,7 +59,7 @@ def load_config(path):
         raise ValueError("Invalid speed gates.")
     a = c["agent"]
     for key in ("writers", "generations", "migration_interval", "max_calls", "max_output_tokens",
-                "max_total_tokens", "timeout_seconds", "context_chars", "stall_generations"):
+                "max_total_tokens", "timeout_seconds", "context_chars"):
         if type(a.get(key)) is not int or a[key] <= 0:
             raise ValueError(f"Invalid agent limit: {key}.")
     if a["writers"] != 8 or a["islands"] != ["memory", "parallel", "compute", "fusion"]:
@@ -68,6 +68,8 @@ def load_config(path):
         raise ValueError("Use one to eight concurrent API calls.")
     if type(a.get("max_retries")) is not int or not 0 <= a["max_retries"] <= 3:
         raise ValueError("Use zero to three API retries.")
+    if type(a.get("max_repair_attempts")) is not int or not 1 <= a["max_repair_attempts"] <= 10:
+        raise ValueError("Use one to ten repair attempts per candidate chain.")
     return c
 
 

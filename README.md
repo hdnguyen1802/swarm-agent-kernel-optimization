@@ -132,8 +132,20 @@ Concurrent calls reserve tokens before they start. Unknown request outcomes keep
 their reservation. These are use limits, not a price guarantee.
 Each retry consumes a call. A known quota rejection consumes zero accounted tokens.
 The controller disables hidden SDK retries so it can count each attempt.
-The search stops after ten generations or four unchanged generations.
+The search permits ten generations. Each failed candidate chain permits three repairs.
+It can also stop at the API budget or after an accepted model result with no pending repairs.
 An optional failure review uses the same limits.
+
+Each generation tests the selected kernels inside the complete model. If this test
+fails, the same writer receives the failed source, workload, seed, and numerical report.
+It keeps the same task for its next repair. Operation failures use the same queue.
+The queue survives stop and resume. A failed model combination blocks its selected
+candidates from promotion. A later repair must pass new tests.
+The report names all kernels in the failed combination. It does not assume that each
+kernel caused the failure. The search keeps the best accepted model result separately.
+It does not discard that result when a later trial fails.
+`configs/validation.json` now permits two generations so it can test a repair round.
+Code changes require a new run folder. Older run folders remain available for reports.
 
 Create `runs/search-001/STOP` to stop at the next generation boundary. Remove it and
 repeat the same search command to resume. The SQLite archive survives a restart.
