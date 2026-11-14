@@ -104,8 +104,8 @@ The coordinator performs the needed interpretation in one role.
 
 The active writer count depends on distinct hypotheses, free slots, estimated
 budget, and the maximum of five. A plan can queue further hypotheses. Duplicate
-transformations from the same parent are rejected. Legacy algorithm proposals
-keep the same identity rules. Objective-based assignments can give the same goal
+transformations from the same parent are rejected. Algorithm suggestions
+follow the same identity rules. Objective-based assignments can give the same goal
 to different specialties so each writer can select its own method.
 
 The controller handles a completed writer without a full-round barrier. It tests
@@ -375,7 +375,7 @@ update progress, but the plateau counter alone does not close an operation.
 The controller also enforces budget availability, STOP, and optional
 `max_task_experiments`. This guard is `null` by default. A failed hypothesis uses its
 bounded corrections; it does not impose an operation-wide failure limit. Infrastructure
-and request failures remain distinct. Legacy migration settings do not impose swarm rounds.
+and request failures remain distinct.
 
 Every task and final stop records the decision source, reason, evidence, and tokens.
 A correct candidate can fail speed gates, enter the archive, and provide useful
@@ -403,13 +403,16 @@ Numerical diagnostics state their actual scope. The full model test determines t
 
 ## Run compatibility
 
-The Triton swarm is the only search controller. The old island loop, advisory
-hardware call, and local reference index are removed. The validation config
-also uses the swarm.
+The Triton swarm is the only search controller. New runs reject retired profiler
+and selection settings. They do not migrate them into a different test contract.
 
 Old run folders keep their config and evidence. Saved report files remain available.
 New source requires a fresh run and profile. The controller audit checks stopped
-swarm runs and preserves their token ledger. It cannot convert an island run.
+swarm runs and preserves their token ledger.
+
+SSH recovery uses the saved dispatch state. It does not reconstruct dispatch
+permission from old command logs. Source transfer removes stale package sources
+from the current source manifest. It preserves data and run evidence.
 
 ## Validation limits
 

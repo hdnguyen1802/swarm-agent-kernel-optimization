@@ -46,19 +46,17 @@ def implementation_hash():
     return digest({p.relative_to(package).as_posix(): p.read_text(encoding="utf-8") for p in files})
 
 
-def require_broad_selection(config):
-    """The former legacy value already used broad selection."""
-    if config.get("optimization_policy", "legacy") != "legacy":
-        raise ValueError("This optimization_policy is no longer supported. Remove it from the launch config "
-                         "and create a new run and profile for broad selection.")
+def require_current_settings(config):
+    """Reject retired settings rather than silently changing a new run."""
+    retired = sorted({"optimization_policy", "profiler"}.intersection(config))
+    if retired:
+        raise ValueError("Retired settings: " + ", ".join(retired) + ". Remove them and create a new run and profile.")
 
 
 def load_config(path, *, historical=False):
     c = read_json(path)
     if not historical:
-        require_broad_selection(c)
-        c.pop("profiler", None)
-    c.pop("optimization_policy", None)
+        require_current_settings(c)
     if c.get("kernel_backend", "triton") != "triton":
         raise ValueError("Only Triton candidates are supported. Use kernel_backend=triton.")
     if c.get("dtype") != "float16" or c.get("attention") not in {"sdpa", "auto"}:

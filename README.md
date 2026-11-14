@@ -9,8 +9,8 @@ The agents can use **Vertex AI or DeepSeek**.
 
 ![SAKO terminal during a Mistral run](docs/images/mistral-terminal.png)
 
-*Saved Mistral run. This earlier view shows speedup versus `torch.compile`.
-The current interface also shows normal PyTorch.*
+*Current terminal view of the saved Mistral results. The table compares normal
+PyTorch, `torch.compile`, and our optimization. `USED` marks the selected kernels.*
 
 ## How it works
 
@@ -26,18 +26,23 @@ candidates in parallel. Each model must fit on one GPU.
 
 ```mermaid
 flowchart TD
-    A[Select model, GPU, and API budget] --> B[Measure PyTorch and torch.compile]
-    B --> C[Profile slow operations]
-    C --> D[Coordinator selects experiments]
-    D --> E[Writers create Triton kernels in parallel]
-    E --> F[Test kernel speed, then correctness]
-    F --> G[Save results and refine designs]
-    G -->|Refine this target| D
-    G --> H[Test top candidates in the complete model]
-    H --> I[Keep the fastest correct model]
-    I -->|Next operation| D
-    I --> J[Validate the combined model and report results]
+    A[Select model, GPUs, and API budget] --> B[Measure references and profile GPU time]
+    B --> C[Select a target and its token budget]
+    C --> D[Coordinator plans; writers create Triton kernels in parallel]
+    D --> E[Screen speed; check promising kernels; tune and confirm]
+    E --> F[Save every trial; update the top four]
+    F -->|Refine within the target budget| D
+    F -->|Target search ends| G[Test complete models: ranks 1 and 2 first]
+    G --> H[Test ranks 3 and 4 only if neither passes]
+    H --> I[Keep the best passing model or retain the accepted model]
+    I -->|Next target, if budget remains| C
+    I -->|Search ends| J[Validate the combined model; report decode results]
 ```
+
+Each model test must pass correctness and show a stable decode gain over the
+accepted model and the compiled reference. Two GPUs can test each pair in parallel.
+If all finalists fail, eligible model failures can use reserved tokens for repairs
+and new tests. Skipped candidates remain saved.
 
 ## Setup
 

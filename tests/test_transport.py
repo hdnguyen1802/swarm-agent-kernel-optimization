@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from sako.core import digest, implementation_hash, read_json, write_json
 from sako.process import CommandTimeout, run_command
-from sako.transport import Worker, TransferError, WorkerJobError
+from sako.transport import Worker, TransferError, WorkerJobError, prune_package_sources
 
 
 def config():
@@ -284,7 +284,7 @@ class DispatchRecoveryTests(unittest.TestCase):
         self.assertEqual(len(commands), 2)
         self.assertEqual(commands[0][-1], commands[1][-1])
 
-    def test_legacy_saved_banner_failure_can_resume(self):
+    def test_old_log_cannot_authorize_a_second_dispatch(self):
         directory = self.root / "runs" / "legacy"
         commands = []
         def execute(command, **kwargs):
@@ -304,11 +304,11 @@ class DispatchRecoveryTests(unittest.TestCase):
                 "returncode": 255, "stdout": "", "stderr": "Connection timed out during banner exchange\nConnection to target port 22 timed out\n"})
             with patch.object(self.worker, "get", side_effect=self.complete_result):
                 self.assertTrue(self.worker.run("evaluate", directory)["done"])
-        self.assertEqual(launch.call_count, 2)
+        self.assertEqual(launch.call_count, 1)
         self.assertTrue(legacy_path.exists())
-        self.assertEqual(len(list(self.worker.log_directory.glob("*-dispatch-2-*.json"))), 1)
+        self.assertEqual(len(list(self.worker.log_directory.glob("*-dispatch-2-*.json"))), 0)
 
-    def test_legacy_missing_log_and_altered_job_do_not_dispatch(self):
+    def test_missing_log_and_altered_job_do_not_dispatch(self):
         directory = self.root / "runs" / "legacy-unknown"
         with patch.object(self.worker, "put"), \
              patch.object(self.worker, "_logged_command", return_value=self.completed([], 255)) as launch:
@@ -350,6 +350,42 @@ class ProcessEvidence(unittest.TestCase):
                             timeout=1, log_path=path)
             self.assertIn("x" * 30000, raised.exception.stdout)
             self.assertIn("x" * 30000, path.read_text())
+
+
+class PackageSourceSync(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.package = self.root / "sako"
+        (self.package / "prompts").mkdir(parents=True)
+        for name in ("__init__.py", "worker.py", "stale.py", "prompts/current.txt", "prompts/stale.txt",
+                     "weights.pt", "notes.md"):
+            (self.package / name).write_text("saved content", encoding="utf-8")
+        self.expected = ["__init__.py", "worker.py", "prompts/current.txt"]
+
+    def test_sync_removes_stale_sources_and_preserves_data(self):
+        evidence = self.root / "runs" / "trial.json"
+        evidence.parent.mkdir()
+        evidence.write_text('{"timings": [1, 2, 3]}')
+        prune_package_sources(self.root, self.expected)
+        for name in self.expected + ["weights.pt", "notes.md"]:
+            self.assertEqual((self.package / name).read_text(), "saved content")
+        self.assertFalse((self.package / "stale.py").exists())
+        self.assertFalse((self.package / "prompts/stale.txt").exists())
+        self.assertEqual(json.loads(evidence.read_text()), {"timings": [1, 2, 3]})
+        prune_package_sources(self.root, self.expected)
+
+    def test_bad_or_incomplete_manifest_cannot_remove_sources(self):
+        outside = self.root / "outside.py"
+        outside.write_text("keep")
+        for expected in ([], ["../outside.py"], [str(outside)], ["..\\outside.py"],
+                         [*self.expected, "missing.py"]):
+            with self.subTest(expected=expected), self.assertRaises((ValueError, FileNotFoundError)):
+                prune_package_sources(self.root, expected)
+            self.assertTrue((self.package / "stale.py").exists())
+            self.assertTrue((self.package / "prompts/stale.txt").exists())
+            self.assertEqual(outside.read_text(), "keep")
 
 
 if __name__ == "__main__":

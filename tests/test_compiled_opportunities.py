@@ -57,7 +57,7 @@ class BroadSelectionTests(unittest.TestCase):
                 require_mapped_targets(report, tasks, directory)
             self.assertEqual(read_json(Path(directory) / "operation_profile.json")["total_gpu_ms"], 3.)
 
-    def test_retired_setting_cannot_select_strict_or_reuse_a_strict_profile(self):
+    def test_retired_settings_require_a_new_config_but_historical_reads_preserve_them(self):
         config = read_json(PROJECT)
         self.assertNotIn("optimization_policy", config)
         strict = {**config, "optimization_policy": "compiled_opportunities"}
@@ -65,12 +65,15 @@ class BroadSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "old-config.json"
             write_json(path, strict)
-            with self.assertRaisesRegex(ValueError, "Remove it"):
+            with self.assertRaisesRegex(ValueError, "Retired settings"):
                 load_config(path)
-            self.assertEqual(load_config(path, historical=True), load_config(PROJECT))
+            self.assertEqual(load_config(path, historical=True)["optimization_policy"], "compiled_opportunities")
             self.assertEqual(read_json(path), strict)
-            write_json(path, {**config, "optimization_policy": "legacy"})
-            self.assertEqual(load_config(path), load_config(PROJECT))
+            for field, value in (("optimization_policy", "legacy"), ("profiler", {"enabled": True})):
+                write_json(path, {**config, field: value})
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, "Retired settings"):
+                    load_config(path)
+                self.assertEqual(load_config(path, historical=True)[field], value)
         with self.assertRaisesRegex(ValueError, "new run and profile"):
             validate_catalog(config, {"config": strict, "hardware": hardware}, hardware)
 

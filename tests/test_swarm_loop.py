@@ -115,7 +115,6 @@ class SwarmLoopTests(unittest.TestCase):
         self.config["agent"].update(search_mode="swarm", adaptive_budget=True,
             writers=5, islands=["memory", "compute", "scheduling", "fusion", "registers"],
             max_parallel_calls=5, top_k_operations=1, max_task_experiments=1)
-        self.config["profiler"] = {"enabled": False}
         self.config["diagnostics"] = {"enabled": False}
         self.client, self.worker = SwarmClient(), SwarmWorker()
         task = {"id": "rmsnorm_1", "kind": "rmsnorm", "paths": ["model.norm"],

@@ -175,7 +175,6 @@ class SwarmPlanningTests(unittest.TestCase):
         self.assertEqual(result["status"], "accepted")
 
     def test_unused_slots_wait_for_evidence_then_plan_with_results_and_lessons(self):
-        self.config["profiler"] = {"enabled": True}  # Old run settings cannot dispatch a removed job.
         result, before_release, plans = self.pending_initial_writers(cap=3)
         self.assertEqual(before_release, 1, "Free slots alone must not trigger another paid plan.")
         self.assertEqual(len(plans), 2)

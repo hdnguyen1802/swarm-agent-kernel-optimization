@@ -184,12 +184,11 @@ class ProgressRegressionTests(unittest.TestCase):
         self.assertEqual(Store(self.directory / "run/state.sqlite").get("kernel_baselines", {}), {})
         self.assertEqual(last["selection"]["reason"], "shared_archive")
 
-    def test_legacy_seed_flags_cannot_run_a_template_before_the_coordinator(self):
+    def test_tuning_flags_cannot_run_a_template_before_the_coordinator(self):
         self.config["kernel_backend"] = "triton"
         self.config["kernel_search"] = {"enabled": True, "shape_scoped": True, "min_speedup": 1.01}
         self.config["tuning"] = {"enabled": True}
         self.config["timing_audit"] = {"enabled": True}
-        self.config["profiler"] = {"enabled": False}
         t = task()
         write_json(self.directory / "profile/tasks.json", {"config": self.config, "tasks": [t],
             "selected_task_ids": [t["id"]], "hardware": {"fingerprint": "test-gpu"}})
@@ -204,7 +203,6 @@ class ProgressRegressionTests(unittest.TestCase):
 
     def test_triton_writer_gets_no_builtin_optimization_template(self):
         self.config["kernel_backend"] = "triton"
-        self.config["profiler"] = {"enabled": False}
         t = task()
         write_json(self.directory / "profile/tasks.json", {"config": self.config, "tasks": [t],
             "selected_task_ids": [t["id"]], "hardware": {"fingerprint": "test-gpu"}})

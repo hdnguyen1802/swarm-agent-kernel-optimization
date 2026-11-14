@@ -275,7 +275,7 @@ class Agent:
 
     def _attempt(self, role, prompt, system, limits=None, input_tokens=None):
         limits = limits or self.limits_for_role(role)
-        # Adaptive calls count inputs. Legacy roles can use a conservative byte bound.
+        # Use a conservative byte bound when no input token count is available.
         # Keep output headroom until the provider reports total usage.
         reserve = (input_tokens if input_tokens is not None else len((prompt + system).encode())) + limits["max_output_tokens"]
         call_id = self.store.reserve(role, reserve, self.config)

@@ -12,7 +12,7 @@ import re
 import statistics
 
 from .compiled_opportunities import launch_kind
-from .core import digest, require_broad_selection, write_json
+from .core import digest, require_current_settings, write_json
 from .ranking import CASE
 
 METHOD = "compiled_profiler_source_groups_v1"
@@ -201,7 +201,7 @@ def require_mapped_targets(ranking, tasks, output_dir):
 def rank_compiled(tasks, records, workload_count, trials, *, config=None):
     """Select only contracts that contain complete measured fusion groups."""
     if config is not None:
-        require_broad_selection(config)
+        require_current_settings(config)
     def trial_count(workload):
         return trials[workload] if isinstance(trials, dict) else trials
     groups = {}

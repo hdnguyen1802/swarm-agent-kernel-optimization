@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import random
 import re
@@ -17,6 +18,33 @@ from pathlib import Path, PurePosixPath
 from .core import DEFAULT_RESIDENT_MAX_JOBS, read_json, write_json, digest, implementation_hash
 from .feedback import artifact_descriptor
 from .process import CommandTimeout, run_command
+
+
+def prune_package_sources(root, expected):
+    """Remove stale package sources after sync. Preserve data and run evidence."""
+    root = Path(root).resolve()
+    if (root / "sako").is_symlink():
+        raise ValueError("The package folder must not be a symlink.")
+    package = (root / "sako").resolve(strict=True)
+    package.relative_to(root)
+    expected = set(expected)
+    if not expected:
+        raise ValueError("The package source list must not be empty.")
+    for name in expected:
+        path = PurePosixPath(name)
+        if path.is_absolute() or ".." in path.parts or "\\" in name:
+            raise ValueError("Invalid package source path.")
+        source = package / name
+        source.resolve(strict=True).relative_to(package)
+        if not source.is_file():
+            raise ValueError("Missing synchronized source: " + name)
+    sources = [*package.glob("*.py"), *package.glob("prompts/*.txt")]
+    # Check every path before removing any source.
+    for source in sources:
+        source.resolve().relative_to(package)
+    for source in sources:
+        if source.relative_to(package).as_posix() not in expected:
+            source.unlink()
 
 
 class TransferError(RuntimeError):
@@ -292,9 +320,9 @@ class Worker:
     def get(self, relative, destination, *, job_hash=None):
         if self.settings.get("persistent", False):
             return self._session().get(relative, destination, job_hash=job_hash)
-        return self._get_legacy(relative, destination, job_hash=job_hash)
+        return self._get_scp(relative, destination, job_hash=job_hash)
 
-    def _get_legacy(self, relative, destination, *, job_hash=None):
+    def _get_scp(self, relative, destination, *, job_hash=None):
         """Fetch one existing artifact. This method never launches a worker job."""
         destination = Path(destination)
         if self.local:
@@ -334,39 +362,18 @@ class Worker:
             tar.add(self.root / "pyproject.toml", arcname="pyproject.toml")
         self.put(archive, "project.tar.gz")
         remote = shlex.quote(self.settings["root"])
-        # Extraction leaves retired modules on an existing worker. They affect its source hash.
-        self.command(f"cd {remote} && tar -xzf project.tar.gz "
-                     "&& rm -f -- sako/profile_policy.py tests/gpu_profile_binding_checks.py "
-                     "sako/cuda_build.py sako/prompts/writer.txt sako/adaptive.py sako/islands.py sako/references.py "
-                     "scripts/build_reference_index.py configs/legacy.json references/catalog.json references/index.json "
-                     "tests/test_search.py tests/test_adaptive.py tests/test_adaptive_integration.py tests/test_islands.py")
+        package = self.root / "sako"
+        expected = sorted(p.relative_to(package).as_posix()
+                          for p in [*package.glob("*.py"), *package.glob("prompts/*.txt")])
+        cleanup = "from sako.transport import prune_package_sources; import json, sys; prune_package_sources('.', json.loads(sys.argv[1]))"
+        self.command(f"cd {remote} && tar -xzf project.tar.gz && " +
+                     shlex.join([self.settings["python"], "-c", cleanup, json.dumps(expected)]))
         return {"transport": "ssh", "root": self.settings["root"], "kernel_backend": "triton"}
 
     def _dispatch_artifacts(self, pending):
         paths = [self.root / item[key] for item in pending.get("dispatch_history", [])
                  for key in ("log", "client_log") if item.get(key)]
         return [artifact_descriptor(self.root, path) for path in paths if path.exists()]
-
-    def _recover_legacy_dispatch(self, pending, pending_path, remote_command):
-        """Recognize the old saved banner failure only when it matches this exact job."""
-        if pending.get("status") != "dispatched":
-            return
-        log_path = self.log_directory / (pending["job_id"] + ".json")
-        try:
-            record = read_json(log_path)
-        except (OSError, ValueError):
-            return
-        lines = record.get("stderr", "").splitlines()
-        if (record.get("status") != "complete" or record.get("returncode") != 255
-                or record.get("stdout") != "" or record.get("command") != self.ssh() + [remote_command]
-                or len(lines) != 2 or lines[0] != "Connection timed out during banner exchange"
-                or not re.fullmatch(r"Connection to .+ port \d+ timed out", lines[1])):
-            return
-        pending.update(status="not_dispatched", dispatch_attempts=1,
-                       dispatch_history=[{"attempt": 1, "status": "not_dispatched", "retryable": True,
-                           "reason": "Saved legacy OpenSSH banner timeout.",
-                           "log": log_path.relative_to(self.root).as_posix()}])
-        write_json(pending_path, pending)
 
     def _dispatch_remote(self, pending, pending_path, remote_command, timeout):
         """Retry proven startup failures. Never repeat an uncertain remote command."""
@@ -491,7 +498,6 @@ class Worker:
                 "TORCHINDUCTOR_CACHE_DIR=\"$PWD/../cache/inductor\" TRITON_CACHE_DIR=\"$PWD/../cache/triton\" "
                 "TORCH_EXTENSIONS_DIR=\"$PWD/../cache/extensions\" HF_HUB_DISABLE_XET=1 TORCHINDUCTOR_COMPILE_THREADS=2; "
                 f"timeout --signal=TERM --kill-after=10 {timeout} {command_text}")
-            self._recover_legacy_dispatch(pending, pending_path, remote_command)
             if pending["status"] in {"ready", "not_dispatched"}:
                 self._dispatch_remote(pending, pending_path, remote_command, timeout)
             # Dispatching, dispatched, and awaiting_result are all uncertain outcomes.

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from .core import correctness_settings, digest, implementation_hash, read_json, require_broad_selection, write_json
+from .core import correctness_settings, digest, implementation_hash, read_json, require_current_settings, write_json
 
 
 PROFILE_FIELDS = ("model_id", "revision", "dtype", "attention", "workloads", "warmup",
@@ -42,7 +42,7 @@ def validate_catalog(config, catalog, hardware):
     current_correctness, previous_correctness = correctness_settings(config), correctness_settings(previous)
     if config.get("ranking_mode", "eager_regions") != previous.get("ranking_mode", "eager_regions"):
         raise ValueError("Profile ranking mode changed. Create a new profile and run directory.")
-    require_broad_selection(previous)
+    require_current_settings(previous)
     for key in PROFILE_FIELDS:
         if key == "revision":
             # A named revision is resolved and pinned by profiling. Explicit commit IDs must agree.

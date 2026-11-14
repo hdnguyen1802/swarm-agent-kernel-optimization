@@ -4,7 +4,7 @@ import copy
 import traceback
 from pathlib import Path
 
-from .core import digest, implementation_hash, read_json, require_broad_selection, select_nonoverlapping, validate_candidate, write_json
+from .core import digest, implementation_hash, read_json, require_current_settings, select_nonoverlapping, validate_candidate, write_json
 from .feedback import compact_feedback, save_feedback
 from .operation_names import catalog_names, operation_name
 from .store import Store, operation_correct
@@ -20,8 +20,8 @@ class SearchLoop:
         self.directory, self.profile = Path(run_dir).resolve(), Path(profile_dir).resolve()
         self.catalog = read_json(self.profile / "tasks.json")
         self.operation_names = catalog_names(self.catalog)
-        require_broad_selection(config)
-        require_broad_selection(self.catalog.get("config", {}))
+        require_current_settings(config)
+        require_current_settings(self.catalog.get("config", {}))
         self.config, self.limits = config, config["agent"]
         self.store = Store(self.directory / "state.sqlite")
         fingerprint = digest({"config": config, "catalog": self.catalog, "implementation": implementation_hash()})

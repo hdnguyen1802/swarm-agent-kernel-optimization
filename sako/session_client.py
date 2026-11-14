@@ -118,7 +118,7 @@ class SessionClient:
                 try:
                     response = self.rpc({"kind": "get", "path": relative}, min(self.owner.transfer_timeout, remaining))
                     if response.get("status") == "large_file":
-                        return self.owner._get_legacy(relative, destination, job_hash=job_hash)
+                        return self.owner._get_scp(relative, destination, job_hash=job_hash)
                     if response.get("status") != "file":
                         raise TransferError("Session did not return the requested file.")
                     try:
@@ -229,7 +229,7 @@ class SessionClient:
                 if response.get("worker_log"):
                     publish(job_path.with_suffix(".worker.log"), unpack(response["worker_log"]))
                 elif response.get("worker_log_path"):
-                    self.owner._get_legacy(response["worker_log_path"], job_path.with_suffix(".worker.log"))
+                    self.owner._get_scp(response["worker_log_path"], job_path.with_suffix(".worker.log"))
                 self.staged.clear()
                 pending_path.unlink(missing_ok=True)
                 write_json(directory / "jobs" / (job_id + ".transport.json"), {
