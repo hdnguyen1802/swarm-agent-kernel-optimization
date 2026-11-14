@@ -7,6 +7,11 @@ SAKO improves execution code. It keeps the model weights and precision unchanged
 It supports compatible Hugging Face models, including Qwen, Mistral, and Llama.
 The agents can use **Vertex AI or DeepSeek**.
 
+![SAKO terminal during a Mistral run](docs/images/mistral-terminal.png)
+
+*Saved Mistral run. This earlier view shows speedup versus `torch.compile`.
+The current interface also shows normal PyTorch.*
+
 ## How it works
 
 1. Measure the model with normal PyTorch and `torch.compile`.
@@ -18,6 +23,21 @@ The agents can use **Vertex AI or DeepSeek**.
 
 SAKO saves all candidates, failures, and raw timings. Two GPUs can test separate
 candidates in parallel. Each model must fit on one GPU.
+
+```mermaid
+flowchart TD
+    A[Select model, GPU, and API budget] --> B[Measure PyTorch and torch.compile]
+    B --> C[Profile slow operations]
+    C --> D[Coordinator selects experiments]
+    D --> E[Writers create Triton kernels in parallel]
+    E --> F[Test kernel speed, then correctness]
+    F --> G[Save results and refine designs]
+    G -->|Refine this target| D
+    G --> H[Test top candidates in the complete model]
+    H --> I[Keep the fastest correct model]
+    I -->|Next operation| D
+    I --> J[Validate the combined model and report results]
+```
 
 ## Setup
 
