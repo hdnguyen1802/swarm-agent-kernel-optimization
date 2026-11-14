@@ -1,3 +1,4 @@
+from triton_fixtures import RMS_SOURCE
 import copy
 import math
 import tempfile
@@ -6,14 +7,19 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sako.core import candidate_id, load_config, score_cases, select_nonoverlapping, validate_candidate
-from sako.store import Store, BudgetExhausted
+from sako.store import Store, BudgetExhausted, TaskBudgetExhausted, operation_correct
 
 
 class Contracts(unittest.TestCase):
     def setUp(self):
         self.config = load_config(Path(__file__).resolve().parents[1] / "configs/project.json")
-        self.candidate = {"name": "test", "task_id": "linear_1", "strategy": "tile", "uses_cutlass": False,
-                          "source": "torch::Tensor sako_run() { return {}; }", "references": []}
+        self.candidate = {"name": "test", "task_id": "linear_1", "strategy": "tile", "backend": "triton",
+                          "source": RMS_SOURCE, "references": []}
+
+    def test_project_retains_paired_compile_ranking_in_active_and_historical_configs(self):
+        path = Path(__file__).resolve().parents[1] / "configs/project.json"
+        self.assertEqual(self.config["kernel_search"]["score_reference"], "paired_compile")
+        self.assertEqual(load_config(path, historical=True)["kernel_search"]["score_reference"], "paired_compile")
 
     def test_names_do_not_defeat_deduplication(self):
         other = {**self.candidate, "name": "renamed", "strategy": "different words"}
@@ -55,6 +61,28 @@ class Contracts(unittest.TestCase):
 
 
 class Persistence(unittest.TestCase):
+    def test_task_share_reserves_calls_and_tokens_for_later_priorities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "state.sqlite")
+            config = {"max_calls": 12, "max_total_tokens": 1200}
+            store.set("phase_budget", {"task_id": "first", "call_ceiling": 2, "token_ceiling": 300})
+            first = store.reserve("writer", 200, config)
+            with self.assertRaises(TaskBudgetExhausted):
+                store.reserve("writer", 101, config)
+            store.finish_call(first, 20)
+            store.reserve("writer", 100, config)
+            with self.assertRaises(TaskBudgetExhausted):
+                store.reserve("analyst", 1, config)
+            store.set("phase_budget", {"task_id": "second", "call_ceiling": 6, "token_ceiling": 600})
+            self.assertIsInstance(store.reserve("writer", 200, config), int)
+
+    def test_correctness_is_separate_from_speed_acceptance(self):
+        self.assertTrue(operation_correct({"cases": [{"correct": True}],
+                         "decision": {"accepted": False, "speedup": .8}}))
+        self.assertFalse(operation_correct({"cases": [{"correct": False}],
+                          "decision": {"accepted": True, "speedup": 2.}}))
+        self.assertFalse(operation_correct({"error": "Build failed."}))
+
     def test_parallel_reservations_obey_budget_and_resume(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.sqlite"

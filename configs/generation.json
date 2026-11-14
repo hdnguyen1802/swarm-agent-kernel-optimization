@@ -1,0 +1,130 @@
+{
+  "model_id": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "main",
+  "dtype": "float16",
+  "kernel_backend": "triton",
+  "triton_integration": "direct",
+  "model_trial_base": "accepted",
+  "generation_objective": "decode",
+  "attention": "auto",
+  "workloads": [
+    {
+      "mode": "cached_generation",
+      "batch_size": 1,
+      "prompt": "Explain the theory of general relativity in detail, covering spacetime curvature, the equivalence principle, and gravitational waves.",
+      "new_tokens": 128
+    }
+  ],
+  "warmup": 5,
+  "trials": 15,
+  "repeats": 10,
+  "correctness_seeds": [
+    1729,
+    2718,
+    3141
+  ],
+  "atol": 0.03,
+  "rtol": 0.02,
+  "min_speedup": 1.0,
+  "report_eager_baseline": true,
+  "kernel_search": {
+    "enabled": true,
+    "evaluation": "staged",
+    "min_speedup": 1.01,
+    "shape_scoped": true,
+    "path_scoped": true,
+    "score_reference": "paired_compile",
+    "timing_mode": "cuda_graph"
+  },
+  "max_p95_ratio": 1.05,
+  "compile_mode": "default",
+  "fullgraph": true,
+  "model_reference": "torch_compile",
+  "ranking_mode": "compiled_profiler",
+  "measurement": {
+    "mode": "adaptive",
+    "model_sampling": "saved_reference"
+  },
+  "correctness_scope": "replaced_layers",
+  "correctness_reference": "eager",
+  "containing_region_policy": "diagnostic",
+  "model_speed_scope": "targeted_workloads",
+  "supplemental_correctness": {
+    "enabled": true,
+    "max_paths": 3,
+    "max_failure_cases": 3
+  },
+  "max_fixture_cases": 6,
+  "agent": {
+    "provider": "vertex",
+    "project": "your-google-cloud-project",
+    "location": "global",
+    "model": "gemini-4-hydrogen",
+    "writers": 5,
+    "design_portfolio": true,
+    "model_repair_fraction": 0.2,
+    "islands": [
+      "memory",
+      "compute",
+      "scheduling",
+      "fusion",
+      "registers"
+    ],
+    "max_parallel_calls": 5,
+    "max_retries": 2,
+    "adaptive_budget": true,
+    "budget_allocation": "profile_gpu_time",
+    "max_calls": null,
+    "max_output_tokens": 8192,
+    "max_total_tokens": 1000000,
+    "timeout_seconds": 180,
+    "context_chars": 90000,
+    "coordinator_target_chars": 24000,
+    "max_repair_attempts": 2,
+    "max_correction_attempts": 2,
+    "target_selection": "bottleneck_tree",
+    "search_parent_regions": false,
+    "performance_refinement": true,
+    "require_archive_trial": true,
+    "revisit_with_budget": true,
+    "max_stagnant_rounds": 3,
+    "model_context_tokens": 1048576,
+    "model_output_tokens": 65536,
+    "model_limits_source": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-hydrogen",
+    "model_limits_verified": "2026-11-13",
+    "search_mode": "swarm",
+    "archive_size": 4,
+    "lesson_limit": 8,
+    "lesson_context_chars": 12000,
+    "coordinator_max_input_tokens": 150000,
+    "max_task_experiments": null,
+    "candidate_merging": true
+  },
+  "worker": {
+    "transport": "ssh",
+    "host": "gpu-user@gpu-host",
+    "identity": "~/.ssh/id_ed25519",
+    "root": "sako/project",
+    "python": "../.venv/bin/python",
+    "gpu": 0,
+    "timeout_seconds": 1800,
+    "cuda_home": "/usr/local/cuda-12.3",
+    "transfer_attempts": 3,
+    "transfer_timeout_seconds": 600,
+    "transfer_deadline_seconds": 1800,
+    "persistent": true,
+    "resident_max_jobs": 64,
+    "resident_idle_seconds": 600
+  },
+  "diagnostics": {
+    "enabled": true,
+    "max_paths": 128
+  },
+  "tuning": {
+    "enabled": true,
+    "max_configs": 6,
+    "warmup": 2,
+    "trials": 7,
+    "repeats": 10
+  }
+}

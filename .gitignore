@@ -11,10 +11,13 @@ dist/
 *.pem
 *.key
 *service*account*.json
-fleet-management-*.json
+*credentials*.json
+/credentials/
+/secrets/
 .local/
 .pytest_cache/
-references/index.json
+/output/
+/tmp/
 *.tar.gz
 *.pt
 *.safetensors

@@ -16,34 +16,69 @@ def relative(path):
 
 def main():
     parser = argparse.ArgumentParser(prog="sako")
-    parser.add_argument("command", choices=["references", "sync", "doctor", "profile", "baseline", "model-check",
-                                             "evaluate", "search", "status", "report", "api-check", "export"])
+    parser.add_argument("command", choices=["ui", "sync", "doctor", "prepare", "profile", "baseline", "model-check",
+                                             "evaluate", "timing-audit", "search", "integrate", "status", "report", "api-check", "export", "fetch-evidence"])
     parser.add_argument("--config", default="configs/project.json")
-    parser.add_argument("--run", default="runs/main")
-    parser.add_argument("--profile", default="runs/profile")
+    parser.add_argument("--run", help="Run folder. With ui, open a saved run or suggest a new folder.")
+    parser.add_argument("--profile", help="Prepared profile directory; defaults to <run>/profile.")
     parser.add_argument("--candidate")
     parser.add_argument("--manifest")
-    parser.add_argument("--review-failures", action="store_true")
+    parser.add_argument("--job-id", help="Worker job ID for fetch-evidence.")
     args = parser.parse_args()
-    config = load_config(args.config)
-    run, profile = Path(args.run).resolve(), Path(args.profile).resolve()
+    if args.command == "ui":
+        try:
+            from .tui.app import HarnessApp
+        except ModuleNotFoundError as error:
+            if error.name not in {"textual", "rich", "filelock"}:
+                raise
+            parser.exit(2, 'Install the terminal interface with python -m pip install -e ".[ui]".\n')
+        try:
+            app = HarnessApp(ROOT, Path(args.config), args.run, args.profile)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        app.run()
+        return
+    config = load_config(args.config, historical=args.command in ("status", "report", "export"))
+    run = Path(args.run or "runs/main").resolve()
+    profile = Path(args.profile).resolve() if args.profile else run / "profile"
     relative(run)
     relative(profile)
     run.mkdir(parents=True, exist_ok=True)
     worker = Worker(config)
-    if args.command == "references":
-        from .references import build_index
-        result = build_index()
+    if args.command == "fetch-evidence":
+        import re
+        if not re.fullmatch("[0-9a-f]{32}", args.job_id or ""):
+            parser.error("fetch-evidence requires a 32-character job ID")
+        records = list(run.glob("**/jobs/" + args.job_id + ".result.json"))
+        if len(records) != 1:
+            parser.error("No unique result for this job in the run")
+        payload = read_json(records[0])
+        files = payload.get("remote_evidence") or {}
+        if not files:
+            print("Full result already available at " + str(records[0]))
+            return
+        try:
+            folder = records[0].parent / "raw"
+            worker.get(files["result"], folder / records[0].name, job_hash=payload["job_hash"])
+            if files.get("log"):
+                worker.get(files["log"], folder / Path(files["log"]).name)
+        finally:
+            worker.close()
+        result = {"raw_evidence": str(folder / records[0].name)}
     elif args.command == "sync":
         result = worker.sync()
     elif args.command == "doctor":
         result = worker.run("doctor", run)
         write_json(run / "doctor.json", result)
-    elif args.command == "profile":
-        result = worker.run("profile", run, profile_dir=relative(profile))
-        write_json(profile / "tasks.json", result)
-        print(f"Saved {len(result['tasks'])} tasks. Revision: {result['config']['revision']}")
+    elif args.command in ("prepare", "profile"):
+        from .preparation import prepare
+        result = prepare(config, run, profile, worker)
+        print(f"Saved {len(result['tasks'])} tasks; selected {len(result['selected_task_ids'])}. "
+              f"Revision: {result['config']['revision']}. Profile: {json.dumps(relative(profile))}")
         return
+    elif args.command == "baseline" and config.get("measurement", {}).get("mode") == "adaptive":
+        result = worker.run("baseline", run, profile_dir=relative(profile))
+        write_json(run / "baseline.json", result)
     elif args.command in ("baseline", "model-check"):
         if args.command == "model-check":
             if not args.manifest:
@@ -59,50 +94,45 @@ def main():
         result = worker.run("model", run, profile_dir=relative(profile), manifest=relative(path),
                             candidate_root=relative(run / "candidates"))
         write_json(run / ("baseline.json" if args.command == "baseline" else "model-check.json"), result)
-    elif args.command == "evaluate":
+    elif args.command in ("evaluate", "timing-audit"):
         if not args.candidate:
-            parser.error("evaluate requires --candidate")
+            parser.error(args.command + " requires --candidate")
         candidate = read_json(args.candidate)
         path = run / "candidates" / (candidate_id(candidate) + ".json")
         write_json(path, candidate)
         worker.put(path, relative(path))
-        result = worker.run("evaluate", run, profile_dir=relative(profile), candidate=relative(path))
-        write_json(run / "evaluation.json", result)
+        result = worker.run(args.command.replace("-", "_"), run, profile_dir=relative(profile), candidate=relative(path))
+        write_json(run / ("evaluation.json" if args.command == "evaluate" else "timing-audit.json"), result)
     elif args.command == "search":
         from .search import search
-        result = search(config, run, profile, reviewer=args.review_failures)
+        from .preparation import prepare
+        prepare(config, run, profile, worker)
+        result = search(config, run, profile, worker=worker)
+    elif args.command == "integrate":
+        from .integration import integrate
+        try:
+            result = integrate(config, run, profile, worker)
+        finally:
+            worker.close()
     elif args.command in ("status", "report"):
         from .store import Store
         store = Store(run / "state.sqlite")
-        result = {"usage": store.usage(), "generation": store.get("generation", 0),
-                  "parent_selections": [s for p in sorted((run / "selections").glob("*.json"))
-                                        for s in read_json(p)["selections"]],
-                  "migration_events": [read_json(p) for p in sorted((run / "migrations").glob("*.json"))],
-                  "candidate_emissions": store.emissions(),
-                  "duplicate_proposals": sum(e["duplicate"] for e in store.emissions()),
-                  "candidates": [{k: row[k] for k in ("id", "task", "island", "score", "accepted")}
-                                 for row in store.candidates()]}
         if args.command == "report":
-            lines = ["# SAKO search report", "", f"API calls: {result['usage']['calls']}", "",
-                     "| Candidate | Task | Island | Kernel speed ratio | Passed kernel gates |",
-                     "|---|---|---|---:|---|"]
-            lines.extend(f"| {r['id']} | {r['task']} | {r['island']} | {r['score']} | {bool(r['accepted'])} |"
-                         for r in result["candidates"])
-            lines.extend(["", f"Duplicate proposals: {result['duplicate_proposals']}", "",
-                          "| Round | Writer | Island | Parent choice | Parent | Source island | Migration event |",
-                          "|---:|---:|---|---|---|---|---|"])
-            lines.extend(f"| {s['round']} | {s['slot']} | {s['receiving_island']} | {s['reason']} | "
-                         f"{s['candidate_id']} | {s['source_island']} | {s['migration_event']} |"
-                         for s in result["parent_selections"])
-            final = read_json(run / "result.json") if (run / "result.json").exists() else {}
-            model = final.get("model_result")
-            lines.extend(["", "Complete model decision: " + json.dumps(model["decision"] if model else "Not measured.")])
-            (run / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            from .reporting import write_swarm_report
+            report = write_swarm_report(run, config, profile_dir=profile, store=store)
+            result = {"status": report["status"], "budget": report["budget"],
+                      "accepted_model_gain": report["accepted_model_gain"],
+                      "report": str(run / "report.md"), "details": str(run / "report.json")}
+        else:
+            result = {"status": store.get("status", "not_started"), "usage": store.usage(),
+                      "budget": store.budget_snapshot(config["agent"]),
+                      "active_task": store.get("active_task"), "task_progress": store.get("task_progress", {}),
+                      "stop": store.get("swarm_stop"), "candidates": store.candidate_summaries()}
     elif args.command == "api-check":
-        from .agent import Gemini
+        from .agent import create_agent
         from .store import Store
         small = {**config["agent"], "max_output_tokens": 128}
-        result = Gemini(small, Store(run / "api.sqlite"), run).call(
+        result = create_agent(small, Store(run / "api.sqlite"), run).call(
             "connection_test", 'Return {"connected":true}.', "Return only the requested JSON.")
         write_json(run / "api-check.json", result)
     elif args.command == "export":

@@ -35,35 +35,47 @@
   "max_fixture_cases": 6,
   "agent": {
     "provider": "vertex",
-    "project": "fleet-management-poc20231031",
+    "project": "your-google-cloud-project",
     "location": "global",
-    "model": "gemini-3.8-flash",
-    "writers": 8,
-    "max_parallel_calls": 2,
+    "model": "gemini-4-hydrogen",
+    "writers": 4,
+    "max_parallel_calls": 4,
     "max_retries": 2,
     "islands": [
       "memory",
-      "parallel",
       "compute",
-      "fusion"
+      "scheduling",
+      "fusion",
+      "registers"
     ],
-    "generations": 2,
-    "migration_interval": 2,
     "max_calls": 30,
     "max_output_tokens": 4096,
     "max_total_tokens": 500000,
     "timeout_seconds": 180,
     "context_chars": 90000,
-    "max_repair_attempts": 3
+    "max_repair_attempts": 3,
+    "top_k_operations": 1,
+    "max_stagnant_rounds": 3,
+    "model_context_tokens": 1048576,
+    "model_output_tokens": 65536,
+    "model_limits_source": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-hydrogen",
+    "model_limits_verified": "2026-11-13",
+    "candidate_merging": true,
+    "search_mode": "swarm",
+    "adaptive_budget": true
   },
   "worker": {
     "transport": "ssh",
-    "host": "zimug1@144.214.209.197",
-    "identity": "~/.ssh/id_ed25519_codex_fyp",
+    "host": "gpu-user@gpu-host",
+    "identity": "~/.ssh/id_ed25519",
     "root": "sako/project",
     "python": "../.venv/bin/python",
     "gpu": 0,
     "timeout_seconds": 1800,
-    "cuda_home": "/usr/local/cuda-12.3"
-  }
+    "cuda_home": "/usr/local/cuda-12.3",
+    "transfer_attempts": 3,
+    "transfer_timeout_seconds": 600,
+    "transfer_deadline_seconds": 1800
+  },
+  "kernel_backend": "triton"
 }

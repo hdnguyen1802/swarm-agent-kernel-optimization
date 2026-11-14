@@ -1,0 +1,77 @@
+Screen {
+    background: #090b09;
+    color: #e6ebe2;
+    padding: 0 2;
+}
+
+Masthead {
+    height: 7;
+    align-vertical: middle;
+    border-bottom: solid #394037;
+}
+#mark { width: 16; height: 5; }
+#brand { height: auto; width: 1fr; }
+#steps { height: auto; padding: 1 0; }
+#form, #run-body { height: 1fr; scrollbar-size: 1 1; }
+#question, #run-title { height: auto; text-style: bold; margin-bottom: 1; }
+#choices {
+    height: auto;
+    max-height: 18;
+    min-height: 3;
+    background: transparent;
+    border: none;
+    padding: 0;
+    scrollbar-size: 1 1;
+}
+#choices:focus { border: none; }
+#choices > .option-list--option { padding: 0 1; }
+#choices > .option-list--option-highlighted,
+#choices:focus > .option-list--option-highlighted {
+    color: #c1f582;
+    background: #212b1a;
+    text-style: bold;
+}
+#choices > .option-list--option-hover { background: #192015; }
+#editor { height: auto; max-width: 84; }
+#editor Label { color: #a6b29d; }
+Input {
+    border: tall #535f4b;
+    background: #151a13;
+    color: #e6ebe2;
+    margin-bottom: 1;
+}
+Input:focus { border: tall #b3ec65; }
+#feedback, #message { height: auto; margin-top: 1; color: #dfcd9a; }
+#review, #content { height: auto; }
+RunView #run-title { padding-top: 1; margin-bottom: 0; }
+RunView #steps { padding: 1 0; }
+#live-summary {
+    height: auto;
+    border-bottom: solid #394037;
+    margin-bottom: 1;
+}
+#timeline {
+    height: 1fr;
+    border: none;
+    background: transparent;
+    padding: 0;
+    scrollbar-size: 1 1;
+    scrollbar-gutter: stable;
+}
+#timeline:focus { border: none; }
+#confirm {
+    height: 3;
+    width: auto;
+    margin-top: 1;
+    border: tall #394732;
+    background: #202a1a;
+    color: #e6ebe2;
+}
+#confirm:focus, #confirm:hover { background: #b3ec65; color: #10130e; border: tall #b3ec65; }
+#keys { height: auto; padding: 1 0; color: #9aa693; }
+Screen.short Masthead { height: 4; }
+Screen.short #mark { display: none; }
+Screen.short #steps, Screen.short #keys { padding: 0; }
+Screen.short #choices { max-height: 12; }
+Screen.short #run-title, Screen.short #live-summary { margin-bottom: 0; }
+RunView.short #run-title, RunView.short #steps { padding: 0; }
