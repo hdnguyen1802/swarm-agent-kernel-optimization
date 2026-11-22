@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Replay how SAKO tests Triton kernels and compare measured GPU results for Mistral, Qwen, and Llama.">
+    <title>SAKO | Kernel optimization demo</title>
+    <link rel="stylesheet" href="demo.css">
+    <script defer src="runs.js"></script>
+    <script defer src="answers.js"></script>
+    <script defer src="demo.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to demo</a>
+    <header class="site-header wrap">
+        <a class="wordmark" href="#main" aria-label="SAKO demo home"><span class="mark" aria-hidden="true"></span> SAKO</a>
+        <nav aria-label="Demo">
+            <a href="#output-race">Output race</a>
+            <a href="#replay">Model map</a>
+            <a href="#candidates">Candidates</a>
+        </nav>
+    </header>
+
+    <main id="main" class="wrap">
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="hero-copy">
+                <p class="eyebrow">Swarm Agent Kernel Optimization</p>
+                <h1 id="hero-title">Faster language<br class="desktop-break"> model inference.</h1>
+                <p class="intro">SAKO finds slow GPU operations. Agents write Triton kernels, and the evaluator keeps changes that pass correctness checks and speed up the complete model.</p>
+                <div class="hero-actions">
+                    <button class="button primary" id="start-race" type="button"><span class="play-icon" aria-hidden="true"></span> Race the answers</button>
+                    <a class="text-link" href="#replay">Explore the model map</a>
+                </div>
+            </div>
+
+            <section class="benchmark panel" id="benchmark" aria-labelledby="benchmark-title">
+                <div class="panel-heading">
+                    <h2 id="benchmark-title">Decode latency</h2>
+                    <span class="tag">V100 · FP16</span>
+                </div>
+                <fieldset class="model-picker" aria-label="Select a model">
+                    <legend class="visually-hidden">Select a model</legend>
+                    <label><input type="radio" name="model" value="mistral" checked><span>Mistral</span></label>
+                    <label><input type="radio" name="model" value="qwen"><span>Qwen</span></label>
+                    <label><input type="radio" name="model" value="llama"><span>Llama</span></label>
+                </fieldset>
+                <p id="checkpoint" class="checkpoint"></p>
+                <p class="chart-caption">Milliseconds per token · lower is better</p>
+                <dl class="chart" aria-label="Complete model decode latency">
+                    <div class="chart-row" data-series="pytorch">
+                        <dt>PyTorch</dt><dd><span class="bar-track" aria-hidden="true"><span class="bar"></span></span><span class="chart-value"></span></dd>
+                    </div>
+                    <div class="chart-row" data-series="compiled">
+                        <dt><code>torch.compile</code></dt><dd><span class="bar-track" aria-hidden="true"><span class="bar"></span></span><span class="chart-value"></span></dd>
+                    </div>
+                    <div class="chart-row optimized" data-series="optimized">
+                        <dt>SAKO</dt><dd><span class="bar-track" aria-hidden="true"><span class="bar"></span></span><span class="chart-value"></span></dd>
+                    </div>
+                </dl>
+                <div class="metrics" aria-live="polite" aria-atomic="true">
+                    <p><strong id="speedup"></strong><span>speedup vs PyTorch</span></p>
+                    <p><strong id="throughput"></strong><span>tokens per second</span></p>
+                </div>
+            </section>
+        </section>
+
+        <section class="section" id="output-race" aria-labelledby="race-title">
+            <div class="section-heading">
+                <div>
+                    <h2 id="race-title" tabindex="-1">Same answer, different speeds</h2>
+                    <p>Real <strong id="race-model"></strong> output from the saved V100 benchmarks.</p>
+                </div>
+                <button class="button primary" id="play-race" type="button">Play race</button>
+            </div>
+            <div class="race-prompt panel">
+                <span>Prompt</span>
+                <p id="race-prompt-text"></p>
+            </div>
+            <p class="race-method">This replay uses the measured median decode rates. The clock starts after the first token. Each answer stops at the benchmark’s 128-token limit.</p>
+            <p id="race-status" role="status"></p>
+            <div class="race-grid">
+                <article class="panel race-lane" data-racer="pytorch" aria-labelledby="race-pytorch-title">
+                    <header><h3 id="race-pytorch-title">PyTorch</h3><span class="lane-result"></span></header>
+                    <progress aria-label="PyTorch output tokens" value="0" max="128"></progress>
+                    <div class="lane-metrics"><span class="lane-tokens"></span><span class="lane-time"></span></div>
+                    <p class="lane-output" tabindex="0" aria-label="PyTorch generated text"></p>
+                </article>
+                <article class="panel race-lane" data-racer="compiled" aria-labelledby="race-compiled-title">
+                    <header><h3 id="race-compiled-title">torch.compile</h3><span class="lane-result"></span></header>
+                    <progress aria-label="torch.compile output tokens" value="0" max="128"></progress>
+                    <div class="lane-metrics"><span class="lane-tokens"></span><span class="lane-time"></span></div>
+                    <p class="lane-output" tabindex="0" aria-label="torch.compile generated text"></p>
+                </article>
+                <article class="panel race-lane" data-racer="optimized" aria-labelledby="race-sako-title">
+                    <header><h3 id="race-sako-title">SAKO</h3><span class="lane-result"></span></header>
+                    <progress aria-label="SAKO output tokens" value="0" max="128"></progress>
+                    <div class="lane-metrics"><span class="lane-tokens"></span><span class="lane-time"></span></div>
+                    <p class="lane-output" tabindex="0" aria-label="SAKO generated text"></p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section" id="replay" aria-labelledby="replay-title">
+            <div class="section-heading">
+                <div>
+                    <h2 id="replay-title">Follow a kernel through SAKO</h2>
+                    <p>Pick a model part. See its parallel search and the finalist tests from its first visit.</p>
+                </div>
+                <button class="button secondary" id="play-replay" type="button"><span class="play-icon" aria-hidden="true"></span><span id="play-label">Play this target</span></button>
+            </div>
+            <div class="replay-grid">
+                <section class="panel workflow" aria-labelledby="workflow-title">
+                    <h3 id="workflow-title">Harness workflow</h3>
+                    <ol class="workflow-steps">
+                        <li><button type="button" data-phase="pick" aria-controls="target-content"><span class="step-number" aria-hidden="true">1</span><span><strong>Pick a target</strong><small>Use profiled GPU time</small></span></button></li>
+                        <li><button type="button" data-phase="kernel" aria-controls="target-content"><span class="step-number" aria-hidden="true">2</span><span><strong>Search in parallel</strong><small id="writer-overlap"></small></span></button></li>
+                        <li><button type="button" data-phase="model" aria-controls="target-content"><span class="step-number" aria-hidden="true">3</span><span><strong>Test finalists on two GPUs</strong><small id="model-batch-label">One full model trial on each GPU</small></span></button></li>
+                        <li><button type="button" data-phase="decide" aria-controls="target-content"><span class="step-number" aria-hidden="true">4</span><span><strong>Keep the best or test the next pair</strong><small>Use the measured result</small></span></button></li>
+                    </ol>
+                    <p class="workflow-return" id="workflow-return"><span aria-hidden="true">↺</span><span id="workflow-return-label"></span></p>
+                </section>
+                <figure class="panel model-map" aria-labelledby="map-caption">
+                    <figcaption id="map-caption"><strong id="map-model"></strong><span>Simplified model</span></figcaption>
+                    <div class="model-flow">
+                        <div class="flow-node">Token embedding</div>
+                        <div class="transformer">
+                            <div class="transformer-label"><strong>Transformer layer</strong><span id="layer-count"></span></div>
+                            <div class="transformer-parts">
+                                <div class="part-group" role="group" aria-label="Attention projections">
+                                    <p>Attention</p>
+                                    <div class="attention-parts">
+                                        <button class="model-part" type="button" data-part="query" aria-controls="target-content" aria-pressed="false">Query</button>
+                                        <button class="model-part" type="button" data-part="key-value" aria-controls="target-content" aria-pressed="false">Key + value</button>
+                                        <button class="model-part" type="button" data-part="attention-output" aria-controls="target-content" aria-pressed="false">Output</button>
+                                    </div>
+                                </div>
+                                <div class="part-group" role="group" aria-label="Feed-forward projections">
+                                    <p>Feed-forward</p>
+                                    <div class="feed-forward-parts">
+                                        <button class="model-part" type="button" data-part="gate-up" aria-controls="target-content" aria-pressed="false">Gate + up</button>
+                                        <button class="model-part" type="button" data-part="down" aria-controls="target-content" aria-pressed="false">Down</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="model-part flow-node" type="button" data-part="output-head" aria-controls="target-content" aria-pressed="false">Output head</button>
+                        <div class="flow-node next-token">Next token</div>
+                    </div>
+                    <div class="map-footer">
+                        <p class="map-note" id="map-note"></p>
+                        <button class="text-button" type="button" id="final-model">Show final model</button>
+                    </div>
+                </figure>
+                <div class="panel target-panel">
+                    <div id="target-content" aria-live="polite" aria-atomic="true"></div>
+                    <div class="replay-controls">
+                        <button class="button secondary" id="previous-target" type="button">Back</button>
+                        <button class="button primary" id="next-target" type="button">Next step</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="evidence-disclosures">
+                <details class="panel" id="candidates">
+                    <summary>Candidate results</summary>
+                    <p id="table-summary"></p>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Candidate results">
+                        <table>
+                            <caption class="visually-hidden">Selected kernels and one rejected candidate</caption>
+                            <thead><tr><th scope="col">Original vs. candidate</th><th scope="col">Local speedup</th><th scope="col">Model decision</th></tr></thead>
+                            <tbody id="candidate-rows"></tbody>
+                        </table>
+                    </div>
+                    <p class="decision-note">Local speedup compares the candidate with the compiled operation. SAKO decides what to keep after the full model test.</p>
+                </details>
+                <details class="panel" id="benchmark-method">
+                    <summary>Benchmark method</summary>
+                    <div class="evidence">
+                        <div>
+                            <p>We ran each benchmark on a Tesla V100 with FP16 and batch size 1. The model generated 128 tokens. We timed the 127 decode steps after the first token.</p>
+                            <p>The evaluator checked output tokens, prediction scores, and cache contents. It compared the final model with <code>torch.compile</code>.</p>
+                            <a class="text-link" href="https://github.com/hdnguyen1802/swarm-agent-kernel-optimization/blob/main/docs/validation.md#recorded-gpu-results">Read the benchmark notes</a>
+                        </div>
+                        <figure>
+                            <a href="../images/mistral-terminal.png"><img src="../images/mistral-terminal.png" alt="SAKO terminal showing the three Mistral timing columns and four kernels marked USED" width="1409" height="782" loading="lazy"></a>
+                            <figcaption>Terminal view of the recorded Mistral run.</figcaption>
+                        </figure>
+                    </div>
+                </details>
+            </div>
+        </section>
+        <noscript><p class="section">Enable JavaScript to replay the run and compare models.</p></noscript>
+    </main>
+
+    <footer class="site-footer wrap">
+        <span>SAKO · Swarm Agent Kernel Optimization</span>
+        <a href="https://github.com/hdnguyen1802/swarm-agent-kernel-optimization">View source on GitHub</a>
+    </footer>
+</body>
+</html>
